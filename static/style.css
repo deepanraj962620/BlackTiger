@@ -1,0 +1,7 @@
+body{margin:0;background:#020502;color:#48ff67;font-family:Consolas,monospace}
+.wrap{min-height:100vh;display:grid;place-items:center;padding:20px}.card{width:min(900px,94vw);
+background:#071007;border:1px solid #194823;border-radius:14px;padding:24px}
+h1{letter-spacing:4px}.muted{color:#7da582}table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{border-bottom:1px solid #194823;padding:10px;text-align:left}
+button,a{display:inline-block;background:#0d2d12;color:#48ff67;border:1px solid #29b947;padding:11px 14px;border-radius:8px;text-decoration:none;font-weight:bold}
+button{width:100%;margin-top:18px}

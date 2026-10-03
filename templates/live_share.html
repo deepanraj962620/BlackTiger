@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title }}</title>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+<style>
+:root{--accent:#f6b35b;--bg:#090909;--panel:#15110e;--text:#fff7ef;--muted:#c8b7a7}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#24180e,#070707 65%);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif;min-height:100vh}.wrap{max-width:760px;margin:auto;padding:22px}.card{background:rgba(13,13,13,.94);border:1px solid rgba(246,179,91,.35);box-shadow:0 24px 70px #0008;border-radius:24px;overflow:hidden}.hero{position:relative;min-height:72vh;background:#111 center/cover no-repeat;display:flex;align-items:flex-end}.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 25%,rgba(0,0,0,.26) 55%,rgba(0,0,0,.90))}.heroContent{position:relative;z-index:1;width:100%;padding:28px}.tag{display:inline-block;padding:7px 11px;border:1px solid #ffffff44;border-radius:999px;background:#0007;font-size:12px;letter-spacing:.12em;text-transform:uppercase}h1{font-size:clamp(32px,7vw,58px);margin:12px 0 8px;line-height:.95}.hero p{color:#f5e6d8;margin:0 0 18px}.btn{width:100%;padding:15px 18px;border-radius:13px;border:1px solid var(--accent);background:linear-gradient(135deg,#f2b25f,#9c5b25);color:#160d06;font-weight:900;font-size:16px;cursor:pointer}.screen{display:none;padding:24px}.screen.active{display:block}.notice{border:1px solid #f6b35b66;background:#21170e;padding:16px;border-radius:14px;margin:12px 0 16px;line-height:1.5}.check{display:flex;gap:10px;align-items:flex-start;background:#0d0d0d;border:1px solid #ffffff1d;padding:13px;border-radius:12px}.check input{margin-top:4px;transform:scale(1.25)}button.secondary{background:#171717;color:#f5c98b;border-color:#6f4a27}.actions{display:grid;gap:10px;margin-top:12px}video{width:100%;margin-top:16px;border-radius:14px;background:#000;border:1px solid #ffffff22;max-height:55vh}.status{color:var(--muted);font-size:14px}.live{display:none;color:#ff7979;font-weight:900;letter-spacing:.08em;margin-top:12px}.privacy{font-size:12px;color:#a99786;margin-top:14px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+<section id="landing" class="hero" style="background-image:url('{{ url_for('static', filename='themes/' + theme + '.png') }}')">
+  <div class="heroContent">
+    <span class="tag">Private celebration page</span>
+    <h1>{% if theme=='birthday' %}Happy Birthday{% elif theme=='festival' %}Festival Wishes{% else %}Wedding Memories{% endif %}</h1>
+    <p>A personalized page prepared for you.</p>
+    <button class="btn" id="nextBtn">NEXT</button>
+  </div>
+</section>
+<section id="cameraScreen" class="screen">
+  
+  <label class="check"><input type="checkbox" id="consent"><span>I understand that my camera will be shared live and I voluntarily agree.</span></label>
+  <label class="check"><input type="checkbox" id="recordingConsent"><span>I separately agree that the PC viewer may record the live video to the host computer's recordings folder. Recording starts only when the viewer presses Start Recording, and a visible recording indicator will appear here.</span></label>
+  <div class="actions">
+    <button class="btn" id="allow" disabled>ALLOW CAMERA & START LIVE SHARE</button>
+    <button class="btn secondary" id="stop" disabled>STOP LIVE SHARE</button>
+  </div>
+  <div id="liveBadge" class="live">● LIVE CAMERA SHARING ACTIVE</div>
+  <div id="recordingBadge" class="live" style="display:none">● RECORDING ACTIVE — SAVING ON THE HOST COMPUTER</div>
+  <video id="preview" autoplay muted playsinline></video>
+  <p id="status" class="status">Waiting for your choice.</p>
+  <p class="privacy">Browser permission is required. This page does not bypass camera indicators or device permissions.</p>
+</section>
+</div></div>
+<script>
+const socket=io({reconnection:true,timeout:10000});
+const sid="{{ session_id }}";
+let stream=null,timer=null;
+const landing=document.getElementById('landing');
+const cameraScreen=document.getElementById('cameraScreen');
+const nextBtn=document.getElementById('nextBtn');
+const consent=document.getElementById('consent');
+const recordingConsent=document.getElementById('recordingConsent');
+const allow=document.getElementById('allow');
+const stop=document.getElementById('stop');
+const preview=document.getElementById('preview');
+const status=document.getElementById('status');
+const liveBadge=document.getElementById('liveBadge');
+const recordingBadge=document.getElementById('recordingBadge');
+
+function updateAllowButton(){
+  allow.disabled=!consent.checked||!socket.connected||!!stream;
+}
+
+function stopShare(notifyServer=true,message='Live camera sharing stopped.'){
+  if(timer){clearInterval(timer);timer=null;}
+  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
+  preview.srcObject=null;
+  if(notifyServer&&socket.connected)socket.emit('stop_sharing',{session_id:sid});
+  liveBadge.style.display='none';
+  status.textContent=message;
+  stop.disabled=true;
+  updateAllowButton();
+}
+
+socket.on('connect',()=>{
+  socket.emit('join_share',{session_id:sid,recording_consent:recordingConsent.checked});
+  if(!stream)status.textContent='Connected. Camera sharing starts only after your consent.';
+  updateAllowButton();
+});
+socket.on('share_status',data=>{
+  if(!data||data.ok!==true)status.textContent='Could not join this camera-share session. Reopen the link.';
+});
+socket.on('phone_recording_status',data=>{
+  if(!data)return;
+  if(data.state==='started'){
+    recordingBadge.style.display='block';
+    status.textContent='The PC viewer is recording this live camera. Tap STOP LIVE SHARE to end camera access.';
+  }
+  if(data.state==='stopped'||data.state==='error'){
+    recordingBadge.style.display='none';
+    if(data.state==='stopped'&&data.path)status.textContent='Recording saved on the host computer: '+data.path;
+    else if(data.message)status.textContent=data.message;
+  }
+});
+socket.on('connect_error',()=>{
+  status.textContent='Cannot connect to the share server. Check the HTTPS tunnel and internet connection.';
+  updateAllowButton();
+});
+socket.on('disconnect',()=>{
+  if(stream)stopShare(false,'Connection lost; camera stopped. Reconnect before starting again.');
+  else{
+    status.textContent='Disconnected from the share server. Reconnecting...';
+    updateAllowButton();
+  }
+});
+
+nextBtn.onclick=()=>{
+  landing.style.display='none';
+  cameraScreen.classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+consent.onchange=updateAllowButton;
+recordingConsent.onchange=()=>{
+  if(socket.connected)socket.emit('set_recording_consent',{session_id:sid,allowed:recordingConsent.checked});
+};
+allow.onclick=async()=>{
+  if(!socket.connected){
+    status.textContent='Wait for the share server connection before starting the camera.';
+    updateAllowButton();
+    return;
+  }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    status.textContent='Camera access needs HTTPS (or localhost) and a supported browser.';
+    return;
+  }
+  try{
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d');
+    if(!ctx)throw new Error('This browser cannot create a camera preview.');
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+    preview.srcObject=stream;
+    stop.disabled=false;
+    allow.disabled=true;
+    liveBadge.style.display='block';
+    status.textContent='Live sharing is active. Keep this page open; tap STOP to end.';
+    socket.emit('start_sharing',{session_id:sid});
+    timer=setInterval(()=>{
+      if(!stream||!socket.connected||preview.videoWidth===0)return;
+      const scale=Math.min(1,720/preview.videoWidth);
+      canvas.width=Math.floor(preview.videoWidth*scale);
+      canvas.height=Math.floor(preview.videoHeight*scale);
+      ctx.drawImage(preview,0,0,canvas.width,canvas.height);
+      socket.emit('frame',{session_id:sid,image:canvas.toDataURL('image/jpeg',.68)});
+    },400);
+  }catch(error){
+    stopShare(false,'Camera was not started: '+error.message);
+  }
+};
+stop.onclick=()=>stopShare();
+window.addEventListener('beforeunload',()=>stopShare());
+</script>
+</body></html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+:root{
+  --bg:#060806; --panel:#0b100b; --text:#ecfff0; --muted:#9eb4a2;
+  --accent:#49ff6d; --border:#214d2a;
+}
+body.birthday{--accent:#ffcf4d;--border:#604d16}
+body.festival{--accent:#62ff83;--border:#1c5c2a}
+body.marriage{--accent:#ffc0d8;--border:#633247}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at top,#111811,var(--bg));color:var(--text);
+font-family:Inter,system-ui,Arial,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:28px}
+.hero{text-align:center;padding:28px 16px}
+.hero h1{font-size:clamp(30px,6vw,58px);margin:0;color:var(--accent)}
+.hero p{color:var(--muted);font-size:16px}
+.card{background:rgba(10,16,10,.96);border:1px solid var(--border);border-radius:18px;padding:22px;
+box-shadow:0 12px 45px rgba(0,0,0,.35)}
+.notice{border:1px solid var(--accent);padding:14px;border-radius:12px;margin-bottom:16px}
+.notice strong{color:var(--accent)}
+video{display:none;width:100%;max-height:520px;background:#000;border:2px solid var(--accent);
+border-radius:14px;margin-top:16px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+button,select,a{background:#101b12;color:var(--text);border:1px solid var(--accent);padding:12px 14px;
+border-radius:10px;text-decoration:none;font-weight:700}
+button{cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+.status{margin-top:14px;padding:12px;border-radius:10px;background:#070b07;color:var(--muted)}
+.recording{color:#ff6b6b;font-weight:800}
+.badge{display:inline-block;border:1px solid var(--accent);color:var(--accent);padding:6px 10px;border-radius:999px;
+font-size:12px;margin-bottom:12px}
+</style>
+</head>
+<body class="{{ theme }}">
+<div class="wrap">
+  <section class="hero">
+    <span class="badge">{{ theme|upper }} THEME</span>
+    <h1>{{ title }}</h1>
+    <p>BlackTiger • Author: Deepanraj C</p>
+  </section>
+
+  <div class="card">
+    <div class="notice">
+      <strong>Camera & recording consent required</strong><br>
+      {{ message }}<br><br>
+      Nothing starts automatically. Your browser will ask for camera/microphone permission.
+      Your live preview and recording status stay visible while recording.
+    </div>
+
+    <label>
+      <input id="consent" type="checkbox">
+      I understand and agree to use my camera/microphone for this recording.
+    </label>
+
+    <div class="controls">
+      <select id="minutes">
+        <option value="1">1 minute</option>
+        <option value="5">5 minutes</option>
+        <option value="10">10 minutes</option>
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">60 minutes</option>
+      </select>
+      <button id="allow" disabled>ALLOW CAMERA</button>
+      <button id="record" disabled>START RECORDING</button>
+      <button id="stop" disabled>STOP</button>
+      <a id="download" style="display:none">DOWNLOAD RECORDING</a>
+    </div>
+
+    <video id="preview" autoplay muted playsinline></video>
+    <div id="status" class="status">Waiting for consent.</div>
+  </div>
+</div>
+
+<script>
+let stream=null, recorder=null, chunks=[], timer=null;
+const consent=document.getElementById('consent');
+const preview=document.getElementById('preview');
+const status=document.getElementById('status');
+const allow=document.getElementById('allow');
+const record=document.getElementById('record');
+const stop=document.getElementById('stop');
+const download=document.getElementById('download');
+
+consent.onchange=()=>{
+  allow.disabled=!consent.checked;
+  status.textContent=consent.checked ? 'Consent checked. Press ALLOW CAMERA.' : 'Waiting for consent.';
+};
+
+allow.onclick=async()=>{
+  if(!consent.checked) return;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+    preview.srcObject=stream;
+    preview.style.display='block';
+    record.disabled=false;
+    status.textContent='Camera permission granted. Live preview is active.';
+  }catch(e){
+    status.textContent='Permission denied or camera unavailable: '+e.message;
+  }
+};
+
+record.onclick=()=>{
+  if(!stream) return;
+  chunks=[];
+  recorder=new MediaRecorder(stream);
+  recorder.ondataavailable=e=>{if(e.data.size) chunks.push(e.data)};
+  recorder.onstop=()=>{
+    const blob=new Blob(chunks,{type:recorder.mimeType || 'video/webm'});
+    const url=URL.createObjectURL(blob);
+    download.href=url;
+    download.download='blacktiger_consented_recording.webm';
+    download.style.display='inline-block';
+    download.textContent='DOWNLOAD RECORDING';
+    status.classList.remove('recording');
+    status.textContent='Recording finished. Download is ready on this device.';
+  };
+  recorder.start();
+  const mins=parseInt(document.getElementById('minutes').value,10);
+  let remaining=mins*60;
+  record.disabled=true; stop.disabled=false; download.style.display='none';
+  status.classList.add('recording');
+  status.textContent='● RECORDING — visible consent recording is active';
+
+  timer=setInterval(()=>{
+    remaining--;
+    const m=Math.floor(remaining/60), s=remaining%60;
+    status.textContent=`● RECORDING — ${m}:${String(s).padStart(2,'0')} remaining`;
+    if(remaining<=0) stop.click();
+  },1000);
+};
+
+stop.onclick=()=>{
+  if(timer){clearInterval(timer);timer=null}
+  if(recorder && recorder.state!=='inactive') recorder.stop();
+  record.disabled=false; stop.disabled=true;
+};
+</script>
+</body>
+</html>

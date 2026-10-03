@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>BlackTiger</title>
+<link rel="stylesheet" href="/static/style.css"></head><body><div class="wrap"><div class="card">
+<h1>BlackTiger</h1><p>System Information Share Portal</p><p class="muted">Author: Deepanraj C</p>
+{% if not approved %}<p>This device shares basic diagnostics only after approval.</p>
+<form method="post"><label><input type="checkbox" name="consent" value="yes" required>
+I approve sharing basic system information from this device.</label><button>APPROVE & SHOW DETAILS</button></form>
+{% else %}<table><tr><th>Field</th><th>Value</th></tr>{% for k,v in data.items() %}
+<tr><td>{{k}}</td><td>{{v}}</td></tr>{% endfor %}</table>
+<p><a href="/download/json">Download JSON</a> <a href="/download/csv">Download CSV</a></p>{% endif %}
+</div></div></body></html>

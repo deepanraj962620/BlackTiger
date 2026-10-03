@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title }}</title>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#050705;color:#d8ffe0;font-family:Inter,system-ui,Arial}
+.wrap{max-width:1150px;margin:auto;padding:24px}
+.card{background:#091009;border:1px solid #22552d;border-radius:18px;padding:18px;box-shadow:0 25px 70px #0008}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+h1{margin:0;color:#59ff7b}
+.badge{border:1px solid #2c6e3b;border-radius:999px;padding:7px 10px;font-size:12px}
+.status{padding:12px 0;color:#b4d9bc}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+button{border:1px solid #4aa35b;border-radius:10px;padding:11px 16px;background:#12391b;color:#e5ffe9;font-weight:700;cursor:pointer}
+button.stop{border-color:#b54444;background:#461818}
+button:disabled{opacity:.48;cursor:not-allowed}
+.hint{font-size:13px;color:#b4d9bc}
+.recording{display:none;color:#ff8585;font-weight:800;margin:8px 0}
+img{width:100%;max-height:78vh;object-fit:contain;background:#000;border:1px solid #1e5a2b;border-radius:12px}
+</style>
+</head>
+<body><div class="wrap"><div class="card">
+<div class="head"><h1>BlackTiger Live Viewer</h1><span class="badge">CONSENT-BASED SESSION</span></div>
+<div id="status" class="status">Waiting for the phone user to open the page and consent...</div>
+<div class="controls">
+  <button id="startRecording" disabled>START RECORDING</button>
+  <button id="stopRecording" class="stop" disabled>STOP RECORDING</button>
+  <span class="hint">Recording is enabled only after the phone user separately consents. MP4 saves in the BlackTiger recordings folder.</span>
+</div>
+<div id="recording" class="recording">● RECORDING — the phone user can see this indicator</div>
+<img id="frame" alt="Live camera stream appears here only after consent">
+</div></div>
+<script>
+const socket=io({reconnection:true,timeout:10000});
+const sid="{{ session_id }}";
+const frame=document.getElementById('frame');
+const status=document.getElementById('status');
+const startRecording=document.getElementById('startRecording');
+const stopRecording=document.getElementById('stopRecording');
+const recordingBadge=document.getElementById('recording');
+let connected=false;
+let sharing=false;
+let recordingAllowed=false;
+let recording=false;
+
+function updateRecordingControls(){
+  startRecording.disabled=!connected||!sharing||!recordingAllowed||recording;
+  stopRecording.disabled=!connected||!recording;
+  recordingBadge.style.display=recording?'block':'none';
+}
+
+socket.on('connect',()=>{
+  connected=true;
+  status.textContent='Connected. Waiting for the phone user to open the page and consent...';
+  socket.emit('join_viewer',{session_id:sid});
+  updateRecordingControls();
+});
+socket.on('connect_error',()=>{status.textContent='Cannot connect to the share server. Check the HTTPS tunnel and internet connection.';});
+socket.on('disconnect',()=>{
+  connected=false;
+  recording=false;
+  updateRecordingControls();
+  status.textContent='Disconnected from the share server. Reconnecting...';
+});
+socket.on('frame',data=>{
+  if(data&&typeof data.image==='string'){
+    frame.src=data.image;
+  }
+});
+socket.on('viewer_status',data=>{
+  if(!data)return;
+  if(data.status==='phone_connected')status.textContent='Phone opened the share page. Waiting for explicit camera consent.';
+  if(data.status==='sharing_started'){sharing=true;status.textContent='LIVE STREAM ACTIVE';}
+  if(data.status==='sharing_stopped'){sharing=false;status.textContent='Live stream stopped by phone user.';}
+  updateRecordingControls();
+});
+socket.on('recording_consent',data=>{
+  recordingAllowed=!!(data&&data.allowed);
+  updateRecordingControls();
+  if(recordingAllowed)status.textContent='Phone user has separately allowed recording. Press START RECORDING when ready.';
+});
+socket.on('recording_status',data=>{
+  if(!data)return;
+  if(data.state==='started'){
+    recording=true;
+    status.textContent='Recording to '+data.path;
+  }else{
+    recording=false;
+    if(data.state==='error')status.textContent=data.message||'Recording could not be started.';
+    else if(data.path)status.textContent='Recording saved: '+data.path;
+    else if(data.message)status.textContent=data.message;
+    else status.textContent='Recording stopped; no camera frames were saved.';
+  }
+  updateRecordingControls();
+});
+startRecording.onclick=()=>{
+  if(connected&&sharing&&recordingAllowed&&!recording){
+    status.textContent='Starting recording...';
+    socket.emit('start_recording',{session_id:sid});
+  }
+};
+stopRecording.onclick=()=>{
+  if(connected&&recording){
+    status.textContent='Finalizing recording...';
+    socket.emit('stop_recording',{session_id:sid});
+  }
+};
+</script></body></html>
