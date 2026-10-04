@@ -115,6 +115,17 @@ For antivirus-backed deep scanning in Option 4:
 sudo apt install clamav
 sudo freshclam
 ```
+### kali linux install commands  ##
+
+git clone https://github.com/deepanraj962620/BlackTigger.git
+
+cd BlackTigger
+
+chmod +x install.sh run.sh run_portal.sh
+
+./install.sh
+
+./run.sh
 
 ## v5.1 reliability updates
 - Added Windows setup and launch scripts with UTF-8 terminal handling.
